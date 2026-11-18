@@ -536,4 +536,54 @@ class LifeSaverService : Service() {
 
     private fun buildTimerNotification(text: String, showCancel: Boolean): Notification {
         val openIntent = PendingIntent.getActivity(
-            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IM
+            this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
+        )
+        val builder = Notification.Builder(this, CHANNEL_TIMER_ID)
+            .setContentTitle("Life Saver")
+            .setContentText(text)
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentIntent(openIntent)
+            .setOngoing(true)
+
+        if (showCancel) {
+            val cancelIntent = Intent(this, LifeSaverService::class.java).apply {
+                action = ACTION_STOP_TIMER
+            }
+            val cancelPending = PendingIntent.getService(
+                this, 1, cancelIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            val cancelAction = Notification.Action.Builder(null as Icon?, "Cancel", cancelPending).build()
+            builder.addAction(cancelAction)
+        }
+
+        return builder.build()
+    }
+
+    private fun updateTimerNotification(text: String, showCancel: Boolean) {
+        getSystemService(NotificationManager::class.java)
+            .notify(1, buildTimerNotification(text, showCancel))
+    }
+
+    override fun onDestroy() {
+        countDownTimer?.cancel()
+        try { unregisterReceiver(unlockReceiver) } catch (_: Exception) {}
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+}
+
+class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
+            val prefs = context.getSharedPreferences("life_saver_prefs", Context.MODE_PRIVATE)
+            if (prefs.getBoolean("morning_greeting", true)) {
+                val serviceIntent = Intent(context, LifeSaverService::class.java).apply {
+                    action = LifeSaverService.ACTION_KEEP_ALIVE
+                }
+                context.startForegroundService(serviceIntent)
+            }
+        }
+    }
+}
+
